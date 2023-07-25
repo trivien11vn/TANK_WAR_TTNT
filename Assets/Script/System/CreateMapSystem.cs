@@ -33,7 +33,6 @@ namespace System
                 square_map[i] = Value.SquareMaterial.Ground;
                 Debug.Log(square_map[i]);
             }
-            var baseTime = System.DateTime.Now.TimeOfDay.TotalSeconds;
 
             state.EntityManager.AddComponent<GameController>(controller);
             state.EntityManager.SetComponentData(controller, new GameController
@@ -121,15 +120,17 @@ namespace System
                 var x = 0;
                 var y = 0;
                 var find = false;
-                while (x == 0 && y == 0 && find == false)
+                while ((x == 0 && y == 0) || find == false)
                 {
                     x = randomData.NextInt(0, w / 2);
                     y = randomData.NextInt(0, h);
                     find = true;
-                    for(var j=0;j<=i;j++){
-                        if(check[j].x == x && check[j].y == y){
-                            find = false;
-                            break;
+                    if(i!=0){
+                        for(var j=0;j<=i;j++){
+                            if(check[j].x == x && check[j].y == y){
+                                find = false;
+                                break;
+                            }
                         }
                     }
                 }
