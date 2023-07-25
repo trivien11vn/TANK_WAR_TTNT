@@ -14,8 +14,6 @@ namespace System
     [UpdateAfter(typeof(CreateMapSystem))]
     public partial struct MiniMaxSystem : ISystem
     {
-        float3 player_positionn;
-        float3 enemy_positionn;
         public void OnCreate(ref SystemState state)
         {
             state.RequireForUpdate<Map>();
@@ -44,6 +42,7 @@ namespace System
             foreach(var(localTransform, player,entity) in SystemAPI.Query<RefRW<LocalTransform>, RefRW<PlayerInfo>>().WithEntityAccess())
             {
                 if (player.ValueRW.turn == true){
+                    var enemy_positionn = localTransform.ValueRW.Position;
                     foreach(var(localTransformmm, playerrr,entityyy) in SystemAPI.Query<RefRW<LocalTransform>, RefRW<PlayerInfo>>().WithEntityAccess())
                     {
                         if(playerrr.ValueRW.turn == false){
@@ -53,7 +52,7 @@ namespace System
                     ////Debug.Log(player.ValueRW.type);
                     PlayerPosition = localTransform.ValueRW.Position;
                     PlayerType = player.ValueRW.type;
-                    player_positionn = localTransform.ValueRW.Position;
+                    var player_positionn = localTransform.ValueRW.Position;
                     //ecb.DestroyEntity(entity);
                     if(SystemAPI.HasComponent<MiniMax>(entity)){
                         ////Debug.Log("MiniMax");
@@ -62,7 +61,10 @@ namespace System
                         {
                             map[j] = square_map[j];
                         }
-                        float3 nextMove = SelectMove(ref state,map, player_positionn);
+
+                        //select next_move
+                        float3 nextMove = SelectMove(ref state,map, player_positionn, enemy_positionn);
+
                         if(nextMove.x == -1 && nextMove.z == -1){
                             var game = SystemAPI.GetSingletonEntity<Map>();
                             ecb.SetComponent(game, new EndGame
@@ -475,9 +477,12 @@ namespace System
             return result1;
         }
     
-        private NativeArray<Value.SquareMaterial> MakeMove (ref SystemState state,NativeArray<Value.SquareMaterial> map, float3 next_position, float3 player_position){
+        private (float3,NativeArray<Value.SquareMaterial>) MakeMove (ref SystemState state,NativeArray<Value.SquareMaterial> map, float3 next_position, float3 player_position){
             Value.SquareMaterial next_state = Value.SquareMaterial.Ground;
-            NativeArray<Value.SquareMaterial> mapp = map;
+            NativeArray<Value.SquareMaterial> mapp = new NativeArray<Value.SquareMaterial>(map.Length, Allocator.Temp);
+            for (var i =0; i< map.Length;i++){
+                mapp[i] = map[i];
+            }
             foreach(var(squareTransform, square) in SystemAPI.Query<RefRW<LocalTransform>, RefRW<Square>>()){
                 if (squareTransform.ValueRW.Position.x == player_position.x && squareTransform.ValueRW.Position.z == player_position.z){
                     var index = square.ValueRW.index;
@@ -487,23 +492,17 @@ namespace System
             foreach(var(squareTransform, square) in SystemAPI.Query<RefRW<LocalTransform>, RefRW<Square>>()){
                 if (squareTransform.ValueRW.Position.x == next_position.x && squareTransform.ValueRW.Position.z == next_position.z){
                     var index = square.ValueRW.index;
-                    
                     mapp[index] = next_state;
                     // ////Debug.Log(index + ":" + next_state);
                     // ////Debug.Log(squareTransform.ValueRW.Position);
                     // ////Debug.Log(square.ValueRW.State);
-                    if(player_position.x == player_positionn.x && player_position.z == player_positionn.z){
-                        player_positionn = next_position;
-                    }
-                    if(player_position.x == enemy_positionn.x && player_position.z == enemy_positionn.z){
-                        enemy_positionn = next_position;
-                    }
+                    player_position = next_position;
                 }
             }
-            return mapp;
+            return (player_position,mapp);
         }
 
-        private float3 SelectMove(ref SystemState state, NativeArray<Value.SquareMaterial> map,float3 player_position){
+        private float3 SelectMove(ref SystemState state, NativeArray<Value.SquareMaterial> map,float3 player_position, float3 enemy_position){
             NativeArray<float3> validMove = findValidMove(ref state, map, player_position);
             
             var randomIndex = -1;
@@ -513,7 +512,7 @@ namespace System
             }
 
             ////Debug.Log("run minimax");
-            var move = MiniMax(ref state,map,player_position,validMove,0,-64,64);
+            var move = MiniMax(ref state,map,player_position,validMove,0,enemy_position);
             ////Debug.Log(move);
             if (move.Item2.x != -1){
                 ////Debug.Log("aaaaa");
@@ -525,6 +524,7 @@ namespace System
                 return move.Item2;
             }
             else{
+                Debug.Log("random");
                 ////Debug.Log(player_position);
                 foreach(var(squareTransform, square) in SystemAPI.Query<RefRW<LocalTransform>, RefRW<Square>>()){
                     if(squareTransform.ValueRW.Position.x == player_position.x && squareTransform.ValueRW.Position.z == player_position.z){
@@ -589,10 +589,11 @@ namespace System
                 return new float3(-1, -1, -1);
             }
         }
-        private (int,float3) MiniMax(ref SystemState state,NativeArray<Value.SquareMaterial> map, float3 player_position,NativeArray<float3> validMove,int depth,int anpha,int beta){
+        private (int,float3) MiniMax(ref SystemState state,NativeArray<Value.SquareMaterial> map, float3 player_position,NativeArray<float3> validMove,int depth, float3 enemy_position){
             float3 bestMove = new float3(-1,-1,-1);
             float3 none = new float3(-1,-1,-1);
-            if (depth == 10){
+            var best_score = -10000;
+            if (depth == 6){
                 ////Debug.Log("full");
                 return (evaluateMove(ref state,map,player_position),none);      
             }
@@ -600,53 +601,29 @@ namespace System
                 ////Debug.Log("fullllllllllll");
                 return (evaluateMove(ref state,map,player_position),none); 
             }
+
             foreach (var a_move in validMove){
-                NativeArray<Value.SquareMaterial> new_map = map;
-                NativeArray<float3> new_validmove = validMove;
-                if(player_position.x == player_positionn.x && player_position.z == player_positionn.z){
-                    ////Debug.Log("player");
-                    ////Debug.Log(player_positionn);
-                    new_map = MakeMove(ref state,map,a_move,player_position);
-                    new_validmove = findValidMove(ref state,new_map, enemy_positionn);
-                    if (new_validmove.Length==3){
-                        return (100,none);
-                    }
-                    if (new_validmove.Length==2){
-                        return (100,none);
-                    }
-                    var res = MiniMax(ref state,new_map,enemy_positionn,new_validmove,depth+1,-beta, -anpha);
-                    var new_val = -res.Item1;
-                    if (new_val > anpha){
-                        anpha = new_val;
-                        bestMove = a_move;
-                    }
-                    if (anpha >= beta){
-                        return (anpha, bestMove);
-                    }
+                Debug.Log(a_move);
+                Debug.Log("check player position");
+                Debug.Log(player_position);
+                Debug.Log(depth);
+                Debug.Log("check map");
+                for (var i=0;i< 10;i++){
+                    Debug.Log(map[i]);
                 }
-                else if (player_position.x == enemy_positionn.x && player_position.z == enemy_positionn.z){
-                    ////Debug.Log("enemy");
-                    ////Debug.Log(enemy_positionn);
-                    new_map = MakeMove(ref state,map,a_move,player_position);
-                    new_validmove = findValidMove(ref state,new_map, player_positionn);
-                    if (new_validmove.Length==3){
-                        return (100,none);
-                    }
-                    if (new_validmove.Length==2){
-                        return (100,none);
-                    }
-                    var res = MiniMax(ref state,new_map,player_positionn,new_validmove,depth+1,-beta, -anpha);
-                    var new_val = -res.Item1;
-                    if (new_val > anpha){
-                        anpha = new_val;
-                        bestMove = a_move;
-                    }
-                    if (anpha >= beta){
-                        return (anpha, bestMove);
-                    }
+                var ress = MakeMove(ref state,map,a_move,player_position);
+                float3 new_player_position = ress.Item1;
+                NativeArray<Value.SquareMaterial> new_map = ress.Item2;
+
+                NativeArray<float3> new_validmove = findValidMove(ref state,new_map, enemy_position);
+                var res = MiniMax(ref state,new_map,enemy_position,new_validmove,depth+1,new_player_position);
+                var new_val = -res.Item1;
+                if (new_val > best_score){
+                    best_score = new_val;
+                    bestMove = a_move;
                 }
             }
-            return (-100, bestMove);
+            return (best_score, bestMove);
         }
         private int evaluateMove(ref SystemState state,NativeArray<Value.SquareMaterial> map,float3 player_position){
             int score_player = 0;
@@ -659,9 +636,6 @@ namespace System
                 if (squareTransform.ValueRW.Position.x == player_position.x && squareTransform.ValueRW.Position.z == player_position.z){
                     var index = square.ValueRW.index;
                     statee = map[index];
-                    ////Debug.Log("index: "+index);
-                    ////Debug.Log(statee);
-                    ////Debug.Log(square.ValueRW.State);
                 }
             }
 
@@ -671,16 +645,9 @@ namespace System
                     score_player += 1;
                 }
             }            
-            ////Debug.Log("score_player: " + score_player);
-            if(player_position.x == player_positionn.x && player_position.z == player_positionn.z){
-                var enemy_move = findValidMove(ref state,map,enemy_positionn);
-                ////Debug.Log(enemy_move.Length);
-                return score_player - enemy_move.Length;    
-            }
-            else{
-                var enemy_move = findValidMove(ref state,map,player_positionn);
-                return score_player - enemy_move.Length; 
-            }
+
+            var player_move = findValidMove(ref state,map,player_position);
+            return score_player * player_move.Length;  
         }
         
     }

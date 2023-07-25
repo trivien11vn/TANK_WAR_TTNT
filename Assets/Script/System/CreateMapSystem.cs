@@ -22,7 +22,7 @@ namespace System
 
         public void OnUpdate(ref SystemState state)
         {
-            Debug.Log("CreateMapSystem");
+           // Debug.Log("CreateMapSystem");
             var Map = SystemAPI.GetSingleton<Map>();
             var ecb = SystemAPI.GetSingleton<BeginSimulationEntityCommandBufferSystem.Singleton>().CreateCommandBuffer(state.WorldUnmanaged);
 
@@ -31,7 +31,7 @@ namespace System
             var square_map = new NativeArray<Value.SquareMaterial>(Map.width * Map.height, Allocator.Persistent);  
             for (var i = 0; i < Map.width*Map.height; i++){
                 square_map[i] = Value.SquareMaterial.Ground;
-                Debug.Log(square_map[i]);
+               // Debug.Log(square_map[i]);
             }
 
             state.EntityManager.AddComponent<GameController>(controller);
@@ -61,7 +61,7 @@ namespace System
 
             state.Dependency = squarejob.ScheduleParallel(square_map.Length,64,state.Dependency);
             state.Dependency = walljob.Schedule(state.Dependency);
-            Debug.Log("end createmap");
+            //Debug.Log("end createmap");
             state.Enabled = false;
         }
 
